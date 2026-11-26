@@ -1,0 +1,720 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data Center Community Impact Simulator</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+:root{
+--primary:#003366;
+--secondary:#0078d4;
+--success:#28a745;
+--warning:#ffc107;
+--danger:#dc3545;
+--bg:#f4f7fa;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:var(--bg)}
+header{background:var(--primary);color:white;padding:25px;text-align:center}
+.container{max-width:1200px;margin:auto;padding:20px}
+.card{background:white;padding:20px;margin-bottom:20px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+h2{color:var(--primary)}
+input,select{width:100%;padding:12px;margin-top:6px;margin-bottom:15px;border:1px solid #ccc;border-radius:8px}
+button{background:var(--secondary);color:white;border:none;padding:12px 20px;border-radius:8px;cursor:pointer;font-size:16px}
+button:hover{background:#005fa3}
+button:disabled{opacity:.6;cursor:wait}
+.results{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px}
+.metric{background:#eef4fb;padding:15px;border-radius:10px}
+.metric h3{margin-top:0}
+.score{font-size:24px;font-weight:bold}
+.badge{display:inline-block;padding:8px 12px;border-radius:20px;font-weight:bold}
+.good{background:#28a745;color:white}
+.medium{background:#ffc107;color:black}
+.bad{background:#dc3545;color:white}
+.analysis-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.impact-box{padding:20px;border-radius:10px}
+.benefits{background:#eefaf1;border-left:6px solid #28a745}
+.concerns{background:#fff2f2;border-left:6px solid #dc3545}
+.impact-box li{margin-bottom:15px;line-height:1.5}
+.report{white-space:pre-wrap;background:#fafafa;padding:20px;border:1px solid #ddd;border-radius:10px;line-height:1.7}
+.narrative{line-height:1.7;background:#fbfbfb;padding:20px;border-radius:10px;border-left:6px solid #0078d4}
+canvas{margin-top:20px}
+.status{padding:12px;border-radius:8px;margin:10px 0 15px;display:none}
+.status.error{display:block;background:#fff2f2;color:#a00000}
+.status.success{display:block;background:#eefaf1;color:#17652b}
+.source-note{font-size:13px;color:#555;line-height:1.6}
+@media(max-width:800px){.analysis-grid{grid-template-columns:1fr}}
+</style>
+</head>
+
+<body>
+
+<header>
+<h1>🏢 Data Center Community Impact Simulator</h1>
+<p>Understand how a proposed data center could affect a community</p>
+</header>
+
+<div class="container">
+
+<div class="card">
+<h2>Community Information</h2>
+
+<label>City or Town Name</label>
+<input id="town" placeholder="Example: Kirksville">
+
+<label>State</label>
+<input id="state" placeholder="Example: Missouri or MO">
+
+<label>Data Center Size</label>
+<select id="mw">
+<option value="25">Edge Facility (25 MW)</option>
+<option value="50">Enterprise Facility (50 MW)</option>
+<option value="100">Regional Facility (100 MW)</option>
+<option value="250">Hyperscale Facility (250 MW)</option>
+<option value="500">Mega Campus (500 MW)</option>
+</select>
+
+<div id="status" class="status"></div>
+
+<button id="analyzeButton" onclick="analyze()">Analyze Community</button>
+
+<p class="source-note">
+Population is retrieved automatically from the U.S. Census Bureau's
+American Community Survey (ACS) 5-year estimates.
+</p>
+</div>
+
+<div class="card">
+<h2>Impact Dashboard</h2>
+<div id="results" class="results"></div>
+<div id="populationSource" class="source-note"></div>
+</div>
+
+<div class="card">
+<h2>Community Scorecard</h2>
+<div id="scorecard"></div>
+</div>
+
+<div class="card">
+<h2>Benefits vs. Potential Concerns</h2>
+<div id="impactAnalysis"></div>
+</div>
+
+<div class="card">
+<h2>Five Years After Construction</h2>
+<div id="futureNarrative" class="narrative"></div>
+</div>
+
+<div class="card">
+<h2>Community Impact Chart</h2>
+<canvas id="impactChart"></canvas>
+</div>
+
+<div class="card">
+<h2>Detailed Community Report</h2>
+<button onclick="generateReport()">Generate Report</button>
+<div id="report" class="report"></div>
+</div>
+
+</div>
+
+<script>
+
+let chart;
+let reportData={};
+
+// Census state codes
+const states={
+"AL":"01","ALABAMA":"01",
+"AK":"02","ALASKA":"02",
+"AZ":"04","ARIZONA":"04",
+"AR":"05","ARKANSAS":"05",
+"CA":"06","CALIFORNIA":"06",
+"CO":"08","COLORADO":"08",
+"CT":"09","CONNECTICUT":"09",
+"DE":"10","DELAWARE":"10",
+"DC":"11","DISTRICT OF COLUMBIA":"11",
+"FL":"12","FLORIDA":"12",
+"GA":"13","GEORGIA":"13",
+"HI":"15","HAWAII":"15",
+"ID":"16","IDAHO":"16",
+"IL":"17","ILLINOIS":"17",
+"IN":"18","INDIANA":"18",
+"IA":"19","IOWA":"19",
+"KS":"20","KANSAS":"20",
+"KY":"21","KENTUCKY":"21",
+"LA":"22","LOUISIANA":"22",
+"ME":"23","MAINE":"23",
+"MD":"24","MARYLAND":"24",
+"MA":"25","MASSACHUSETTS":"25",
+"MI":"26","MICHIGAN":"26",
+"MN":"27","MINNESOTA":"27",
+"MS":"28","MISSISSIPPI":"28",
+"MO":"29","MISSOURI":"29",
+"MT":"30","MONTANA":"30",
+"NE":"31","NEBRASKA":"31",
+"NV":"32","NEVADA":"32",
+"NH":"33","NEW HAMPSHIRE":"33",
+"NJ":"34","NEW JERSEY":"34",
+"NM":"35","NEW MEXICO":"35",
+"NY":"36","NEW YORK":"36",
+"NC":"37","NORTH CAROLINA":"37",
+"ND":"38","NORTH DAKOTA":"38",
+"OH":"39","OHIO":"39",
+"OK":"40","OKLAHOMA":"40",
+"OR":"41","OREGON":"41",
+"PA":"42","PENNSYLVANIA":"42",
+"RI":"44","RHODE ISLAND":"44",
+"SC":"45","SOUTH CAROLINA":"45",
+"SD":"46","SOUTH DAKOTA":"46",
+"TN":"47","TENNESSEE":"47",
+"TX":"48","TEXAS":"48",
+"UT":"49","UTAH":"49",
+"VT":"50","VERMONT":"50",
+"VA":"51","VIRGINIA":"51",
+"WA":"53","WASHINGTON":"53",
+"WV":"54","WEST VIRGINIA":"54",
+"WI":"55","WISCONSIN":"55",
+"WY":"56","WYOMING":"56"
+};
+
+const STATE_NAMES={
+"01":"Alabama","02":"Alaska","04":"Arizona",
+"05":"Arkansas","06":"California","08":"Colorado",
+"09":"Connecticut","10":"Delaware","11":"District of Columbia",
+"12":"Florida","13":"Georgia","15":"Hawaii","16":"Idaho",
+"17":"Illinois","18":"Indiana","19":"Iowa","20":"Kansas",
+"21":"Kentucky","22":"Louisiana","23":"Maine","24":"Maryland",
+"25":"Massachusetts","26":"Michigan","27":"Minnesota",
+"28":"Mississippi","29":"Missouri","30":"Montana",
+"31":"Nebraska","32":"Nevada","33":"New Hampshire",
+"34":"New Jersey","35":"New Mexico","36":"New York",
+"37":"North Carolina","38":"North Dakota","39":"Ohio",
+"40":"Oklahoma","41":"Oregon","42":"Pennsylvania",
+"44":"Rhode Island","45":"South Carolina","46":"South Dakota",
+"47":"Tennessee","48":"Texas","49":"Utah","50":"Vermont",
+"51":"Virginia","53":"Washington","54":"West Virginia",
+"55":"Wisconsin","56":"Wyoming"
+};
+
+const ACS_YEAR=2024;
+
+// Normalize city names to compare Census records
+function normalizeCity(name){
+return name.toLowerCase()
+.trim()
+.replace(/[^a-z0-9 ]/g,"")
+.replace(/\b(city|town|village|borough|municipality|cdp|urban)\b/g,"")
+.replace(/\s+/g," ")
+.trim();
+}
+
+// Look up population through the Census API
+async function getPopulation(city,state){
+
+const stateCode=states[state.trim().toUpperCase()];
+
+if(!stateCode){
+throw new Error("Please enter a valid U.S. state name or two-letter abbreviation.");
+}
+
+const stateName=STATE_NAMES[stateCode];
+
+const url=
+`https://api.census.gov/data/${ACS_YEAR}/acs/acs5?get=NAME,B01003_001E&for=place:*&in=state:${stateCode}`;
+
+const response=await fetch(url);
+
+if(!response.ok){
+throw new Error("The Census Bureau population service is currently unavailable.");
+}
+
+const data=await response.json();
+
+if(!data || data.length<2){
+throw new Error("No population records were returned for this state.");
+}
+
+const searchName=normalizeCity(city);
+
+const matches=data.slice(1).filter(row=>{
+const censusName=row[0].split(",")[0];
+return normalizeCity(censusName)===searchName;
+});
+
+if(matches.length===0){
+throw new Error(
+`Could not find "${city}" as a Census-designated incorporated place or CDP in ${stateName}. Check the spelling or try the community's official Census place name.`
+);
+}
+
+if(matches.length>1){
+throw new Error("Multiple Census places matched this name. Please provide a more specific community name.");
+}
+
+const population=Number(matches[0][1]);
+
+if(!Number.isFinite(population) || population<=0){
+throw new Error("The Census Bureau did not provide a usable population estimate for this community.");
+}
+
+return{
+population,
+censusName:matches[0][0],
+year:ACS_YEAR,
+stateName,
+source:"U.S. Census Bureau, American Community Survey 5-Year Estimates",
+table:"B01003 (Total Population)",
+url:`https://api.census.gov/data/${ACS_YEAR}/acs/acs5`
+};
+}
+
+function showStatus(message,type){
+const status=document.getElementById("status");
+status.textContent=message;
+status.className="status "+type;
+}
+
+async function analyze(){
+
+const town=document.getElementById("town").value.trim();
+const state=document.getElementById("state").value.trim();
+const mw=parseInt(document.getElementById("mw").value);
+
+if(!town || !state){
+showStatus("Please enter both a city and state.","error");
+return;
+}
+
+const button=document.getElementById("analyzeButton");
+button.disabled=true;
+button.textContent="Looking Up Census Population...";
+
+try{
+
+showStatus("Searching U.S. Census Bureau population records...","success");
+
+const census=await getPopulation(town,state);
+
+const population=census.population;
+
+// Existing simulator calculations
+const constructionJobs=Math.round(mw*3.5);
+const permanentJobs=Math.round(mw*0.3);
+const annualTax=mw*25000;
+const dailyWater=mw*6000;
+const annualEnergy=mw*8760;
+const homesEquivalent=Math.round(mw*800);
+const housingNeed=Math.round(permanentJobs*2);
+const populationIncrease=Math.round(permanentJobs*1.4);
+
+const econ=Math.min(100,Math.round((constructionJobs+permanentJobs)/10));
+const env=Math.min(100,Math.round(mw/5));
+const infra=Math.min(100,Math.round(mw/6));
+const growth=Math.min(100,Math.round((populationIncrease/population)*1000));
+
+const populationImpact=((populationIncrease/population)*100).toFixed(2);
+
+reportData={
+town,
+state:census.stateName,
+population,
+mw,
+constructionJobs,
+permanentJobs,
+annualTax,
+dailyWater,
+annualEnergy,
+homesEquivalent,
+housingNeed,
+populationIncrease,
+populationImpact,
+econ,
+env,
+infra,
+growth,
+census
+};
+
+document.getElementById("results").innerHTML=`
+
+<div class="metric">
+<h3>Community Population</h3>
+<div class="score">${population.toLocaleString()}</div>
+</div>
+
+<div class="metric">
+<h3>Construction Jobs</h3>
+<div class="score">${constructionJobs}</div>
+</div>
+
+<div class="metric">
+<h3>Permanent Jobs</h3>
+<div class="score">${permanentJobs}</div>
+</div>
+
+<div class="metric">
+<h3>Annual Tax Revenue</h3>
+<div class="score">$${annualTax.toLocaleString()}</div>
+</div>
+
+<div class="metric">
+<h3>Daily Water Use</h3>
+<div class="score">${dailyWater.toLocaleString()} gal.</div>
+</div>
+
+<div class="metric">
+<h3>Annual Energy Use</h3>
+<div class="score">${annualEnergy.toLocaleString()} MWh</div>
+</div>
+
+<div class="metric">
+<h3>Homes Equivalent</h3>
+<div class="score">${homesEquivalent.toLocaleString()}</div>
+</div>
+
+<div class="metric">
+<h3>Housing Units Needed</h3>
+<div class="score">${housingNeed}</div>
+</div>
+
+<div class="metric">
+<h3>Projected Population Increase</h3>
+<div class="score">${populationIncrease.toLocaleString()}</div>
+</div>
+`;
+
+document.getElementById("populationSource").innerHTML=`
+<strong>Population data source:</strong> ${census.source}.<br>
+<strong>Geographic record:</strong> ${census.censusName}.<br>
+<strong>Data year:</strong> ${census.year}.<br>
+<strong>Population table:</strong> ${census.table}.<br>
+<a href="${census.url}" target="_blank" rel="noopener">View Census API data</a>.
+<br>Population is an ACS five-year estimate, not a live population count.
+`;
+
+let recommendation="";
+
+if(env<40){
+recommendation='<span class="badge good">Recommended</span>';
+}else if(env<70){
+recommendation='<span class="badge medium">Needs Mitigation</span>';
+}else{
+recommendation='<span class="badge bad">High Community Impact</span>';
+}
+
+document.getElementById("scorecard").innerHTML=`
+<p><strong>Economic Benefit:</strong> ${econ}/100</p>
+<p><strong>Environmental Impact:</strong> ${env}/100</p>
+<p><strong>Infrastructure Stress:</strong> ${infra}/100</p>
+<p><strong>Community Growth:</strong> ${growth}/100</p>
+<br>${recommendation}
+`;
+
+document.getElementById("impactAnalysis").innerHTML=`
+
+<div class="analysis-grid">
+
+<div class="impact-box benefits">
+<h3>✅ Potential Benefits</h3>
+<ul>
+<li><strong>Tax Revenue</strong><br>
+Estimated annual tax revenue of $${annualTax.toLocaleString()} could help fund schools, roads, emergency services, parks, and public facilities. Actual revenue depends on local tax rates, incentives, assessments, and tax agreements.</li>
+
+<li><strong>Construction Employment</strong><br>
+Approximately ${constructionJobs} construction jobs could be supported during development. These positions may benefit contractors, restaurants, hotels, and suppliers.</li>
+
+<li><strong>Technology Investment</strong><br>
+The project may encourage upgrades to roads, utilities, broadband infrastructure, and economic development efforts.</li>
+
+<li><strong>Long-Term Jobs</strong><br>
+Approximately ${permanentJobs} permanent employees may be needed to operate and maintain the facility.</li>
+
+<li><strong>Business Growth</strong><br>
+Additional workers and visitors could increase spending at local businesses throughout the community.</li>
+</ul>
+</div>
+
+<div class="impact-box concerns">
+<h3>⚠ Potential Concerns</h3>
+<ul>
+<li><strong>Water Usage</strong><br>
+Estimated consumption could reach ${dailyWater.toLocaleString()} gallons per day. Actual consumption depends on cooling technology, weather, and facility design.</li>
+
+<li><strong>Power Demand</strong><br>
+A ${mw} MW facility would require substantial electricity and may require upgrades to substations and transmission lines.</li>
+
+<li><strong>Housing Demand</strong><br>
+The model estimates demand for ${housingNeed} housing units. Housing pressure depends on whether workers relocate and whether existing housing is available.</li>
+
+<li><strong>Traffic</strong><br>
+Construction activities may increase truck traffic and road congestion.</li>
+
+<li><strong>Pressure on Services</strong><br>
+Population growth may increase demand for schools, healthcare facilities, and emergency services.</li>
+</ul>
+</div>
+
+</div>
+`;
+
+document.getElementById("futureNarrative").innerHTML=`
+
+<h3>🏘️ What Residents Might Notice Five Years Later</h3>
+
+<p>
+The current ACS population estimate for ${town}, ${census.stateName}, is ${population.toLocaleString()} residents. The simulator estimates that the data center could indirectly contribute to a population increase of approximately ${populationIncrease} people, equivalent to ${populationImpact}% of the current population.
+</p>
+
+<p>
+New housing developments may appear if workers relocate to the area. Local restaurants, hotels, stores, and service businesses could see additional customers as economic activity increases.
+</p>
+
+<p>
+Utility companies may need to construct substations, electrical infrastructure, or transmission upgrades. Local governments could potentially use additional tax revenue for roads, parks, schools, and public safety improvements.
+</p>
+
+<p>
+However, the community would need to balance economic growth with concerns about water consumption, housing affordability, and infrastructure capacity.
+</p>
+
+<p><strong>Important:</strong> This is a modeled scenario, not a prediction based on an actual development proposal. The estimated population increase is a planning assumption and should not be interpreted as a Census forecast.</p>
+`;
+
+const ctx=document.getElementById("impactChart");
+
+if(chart) chart.destroy();
+
+chart=new Chart(ctx,{
+type:"bar",
+data:{
+labels:[
+"Economic Benefit",
+"Environmental Impact",
+"Infrastructure Stress",
+"Community Growth"
+],
+datasets:[{
+data:[econ,env,infra,growth],
+backgroundColor:["#28a745","#dc3545","#ffc107","#0078d4"]
+}]
+},
+options:{
+responsive:true,
+scales:{y:{beginAtZero:true,max:100}},
+plugins:{legend:{display:false}}
+}
+});
+
+showStatus(
+`Population successfully retrieved: ${population.toLocaleString()} residents (${ACS_YEAR} ACS estimate).`,
+"success"
+);
+
+}catch(error){
+
+showStatus(error.message,"error");
+
+document.getElementById("results").innerHTML="";
+document.getElementById("populationSource").innerHTML="";
+document.getElementById("scorecard").innerHTML="";
+document.getElementById("impactAnalysis").innerHTML="";
+document.getElementById("futureNarrative").innerHTML="";
+document.getElementById("report").innerText="";
+
+reportData={};
+
+if(chart){
+chart.destroy();
+chart=null;
+}
+
+}finally{
+button.disabled=false;
+button.textContent="Analyze Community";
+}
+}
+
+function generateReport(){
+
+if(!reportData.town){
+alert("Run an analysis first.");
+return;
+}
+
+const d=reportData;
+const c=d.census;
+
+document.getElementById("report").innerText=`
+
+DATA CENTER COMMUNITY IMPACT REPORT
+
+COMMUNITY INFORMATION
+
+Town: ${d.town}
+State: ${d.state}
+Population: ${d.population.toLocaleString()}
+Data Center Size: ${d.mw} MW
+
+POPULATION DATA SOURCE AND METHODOLOGY
+
+The population figure used in this report was retrieved automatically from the United States Census Bureau's American Community Survey (ACS) 5-Year Estimates.
+
+Source: ${c.source}
+Data Year: ${c.year}
+Geographic Record: ${c.censusName}
+Table: ${c.table}
+API: ${c.url}
+
+The ACS is a survey conducted by the Census Bureau that provides demographic and socioeconomic estimates for communities throughout the United States. The five-year estimates combine survey responses collected across five years to provide more reliable estimates for smaller geographic areas.
+
+The population figure represents an estimate rather than a real-time population count. It may differ from the latest local population figures or decennial Census counts.
+
+The simulator uses this population estimate as its baseline for evaluating the potential scale of the proposed data center relative to the existing community.
+
+ECONOMIC IMPACT
+
+CONSTRUCTION EMPLOYMENT
+Approximately ${d.constructionJobs} construction jobs could be supported during development.
+
+These jobs may include electricians, construction workers, engineers, equipment operators, project managers, and contractors.
+
+PERMANENT EMPLOYMENT
+Approximately ${d.permanentJobs} permanent positions could be supported after construction.
+
+These may include technicians, security personnel, maintenance employees, managers, and administrative staff.
+
+TAX REVENUE
+The model estimates annual tax revenue of $${d.annualTax.toLocaleString()}.
+
+This is a simplified planning estimate based on $25,000 per MW. It is not an actual tax assessment or guaranteed payment.
+
+Actual tax revenue depends on property valuation, local tax rates, state tax policies, tax incentives, abatements, and development agreements.
+
+Potential public benefits include funding for schools, roads, emergency services, and other community improvements.
+
+ENERGY IMPACT
+
+The proposed facility would have a capacity of ${d.mw} MW.
+
+Estimated annual electricity consumption:
+${d.annualEnergy.toLocaleString()} MWh.
+
+This estimate assumes continuous operation at full rated capacity for 8,760 hours per year.
+
+The energy equivalent is approximately ${d.homesEquivalent.toLocaleString()} homes, based on the model's assumption of 800 MWh per home annually.
+
+Actual electricity consumption will vary based on utilization, cooling systems, server demand, and facility efficiency.
+
+Electric utilities may need to evaluate transmission capacity, substations, grid reliability, and the availability of additional power generation.
+
+WATER IMPACT
+
+Estimated daily water consumption:
+${d.dailyWater.toLocaleString()} gallons.
+
+This estimate uses a simplified assumption of 6,000 gallons per MW per day.
+
+Actual water usage depends on cooling technology, climate, facility design, and operational requirements.
+
+Communities relying on groundwater, reservoirs, or limited water resources may need additional planning to ensure that data center demand does not negatively affect residential, agricultural, or industrial water supplies.
+
+HOUSING AND POPULATION IMPACT
+
+Current community population:
+${d.population.toLocaleString()} residents.
+
+Estimated additional population:
+${d.populationIncrease.toLocaleString()} people.
+
+Estimated population increase relative to the existing community:
+${d.populationImpact}%.
+
+Estimated housing units needed:
+${d.housingNeed} units.
+
+These figures are simplified model assumptions based on the estimated permanent workforce.
+
+The housing estimate assumes two housing units per permanent employee, while the population estimate assumes 1.4 additional residents per permanent employee.
+
+These figures are not Census forecasts. Actual effects will depend on employee relocation, commuting patterns, household size, and the availability of existing housing.
+
+INFRASTRUCTURE AND COMMUNITY SERVICES
+
+A large data center may require additional electrical infrastructure, roads, water systems, and broadband connections.
+
+Construction can increase truck traffic and temporary demand for local services.
+
+Long-term population changes may also affect schools, healthcare, emergency services, and housing availability.
+
+Local governments should evaluate whether existing infrastructure can accommodate the proposed development and identify who will pay for required improvements.
+
+COMMUNITY SCORECARD
+
+Economic Benefit: ${d.econ}/100
+Environmental Impact: ${d.env}/100
+Infrastructure Stress: ${d.infra}/100
+Community Growth: ${d.growth}/100
+
+These scores are simplified model indicators, not independently measured community statistics or formal environmental assessments.
+
+FIVE-YEAR COMMUNITY OUTLOOK
+
+Five years after construction, ${d.town} could experience increased economic activity, additional infrastructure investment, and changes in local housing demand.
+
+Businesses may benefit from additional spending, while local governments could receive additional tax revenue depending on the project's final tax arrangements.
+
+At the same time, electricity demand, water consumption, housing availability, and infrastructure capacity would remain important considerations.
+
+OVERALL CONCLUSION
+
+The proposed ${d.mw} MW data center could provide economic benefits through employment, investment, and potential tax revenue.
+
+However, those benefits must be evaluated alongside potential environmental and infrastructure costs.
+
+Community leaders should obtain actual project specifications, utility impact studies, water-use projections, employment commitments, and tax agreements before making development decisions.
+
+METHODOLOGY AND LIMITATIONS
+
+The report combines publicly available Census population estimates with simplified assumptions about data center operations.
+
+Population:
+U.S. Census Bureau, ${c.year} American Community Survey 5-Year Estimates, Table B01003.
+
+Construction jobs:
+Estimated at 3.5 jobs per MW.
+
+Permanent jobs:
+Estimated at 0.3 jobs per MW.
+
+Tax revenue:
+Estimated at $25,000 per MW annually.
+
+Water:
+Estimated at 6,000 gallons per MW per day.
+
+Electricity:
+Assumes continuous operation at rated capacity for 8,760 hours annually.
+
+Housing:
+Estimated at two housing units per permanent employee.
+
+Population growth:
+Estimated at 1.4 additional residents per permanent employee.
+
+These assumptions are planning estimates and should not be treated as verified industry averages or guaranteed outcomes.
+
+All financial, employment, energy, water, and housing projections should be replaced with actual project information when available.
+
+END OF REPORT
+
+`;
+
+}
+
+</script>
+</body>
+</html>
